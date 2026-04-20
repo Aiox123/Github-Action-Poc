@@ -28,13 +28,13 @@ jobs:
   create-pr:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout the source branch (master)
+      # Step 1: Checkout the source branch (main)
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: master
+          ref: main
 
-      # Step 2: Create new branch from master and switch to it
+      # Step 2: Create new branch from main and switch to it
       - name: Create and switch to new branch
         run: |
           git checkout -b "${{ inputs.new_branch_name }}"
@@ -53,11 +53,11 @@ jobs:
           git commit -m "Add ${{ inputs.file_name }}"
           git push origin "${{ inputs.new_branch_name }}"
 
-      # Step 5: Create Pull Request (new branch -> master)
+      # Step 5: Create Pull Request (new branch -> main)
       - name: Create Pull Request
         run: |
           gh pr create \
-            --base master \
+            --base main \
             --head "${{ inputs.new_branch_name }}" \
             --title "${{ inputs.pr_title }}" \
             --body "This PR was automatically created by GitHub Actions workflow. Added file: \`${{ inputs.file_name }}\`"
