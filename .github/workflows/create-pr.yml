@@ -1,4 +1,4 @@
-name: Create PR with New File
+name: Create PR with New File (Copilot CLI Prompt Fixed)
 
 on:
   workflow_dispatch:
@@ -28,23 +28,25 @@ jobs:
   create-pr:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout the source branch (main)
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: main
 
-      # Step 2: Create new branch from main and switch to it
+      # 安装 Copilot CLI
+      - name: Install GitHub Copilot CLI
+        run: npm install -g @github/copilot-cli
+
       - name: Create and switch to new branch
-        run: |
-          git checkout -b "${{ inputs.new_branch_name }}"
+        run: git checkout -b "${{ inputs.new_branch_name }}"
 
-      # Step 3: Create a new file and add content
-      - name: Create new file with content
-        run: |
-          printf '%s\n' "${{ inputs.file_content }}" > "${{ inputs.file_name }}"
+      # ✅ 修复：用 >- 折叠多行，避免 YAML 解析报错
+      - name: Use Copilot CLI to create file and write content
+        run: >-
+          copilot -p "Create a new file named '${{ inputs.file_name }}' in current directory, write exactly the following content into it, do not modify any character: `${{ inputs.file_content }}`"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 4: Add, commit and push changes
       - name: Add, commit and push
         run: |
           git add "${{ inputs.file_name }}"
@@ -53,7 +55,6 @@ jobs:
           git commit -m "Add ${{ inputs.file_name }}"
           git push origin "${{ inputs.new_branch_name }}"
 
-      # Step 5: Create Pull Request (new branch -> main)
       - name: Create Pull Request
         run: |
           gh pr create \
