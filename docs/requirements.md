@@ -114,26 +114,39 @@
 
 ---
 
-## 4. 产出物清单（推进中追加）
+## 4. 产出物清单（最终状态）
 
-| 类别 | 路径 | 状态 |
-|---|---|---|
-| 需求文档 | `docs/requirements.md` | 🟡 v1 已建（本文件） |
-| Python 项目重构 | `todo-cli/**` | ⬜ 待办 |
-| 项目元数据 | `todo-cli/pyproject.toml` | ⬜ 待办 |
-| 工单模板与 TODO-002 | `tickets/TODO-002-*.md` | ⬜ 待办 |
-| 工作流更新 | `.github/workflows/todo-cli-ci.yml` | ⬜ 待办 |
-| Copilot 工单评审产物 | `todo-cli/ticket-review.md`（CI 产出，不入仓） | ⬜ 待办 |
+| 类别 | 路径 | 状态 | 备注 |
+|---|---|---|---|
+| 需求文档 | `docs/requirements.md` | ✅ 完成 | 本文件，随阶段追加 |
+| Python 项目重构 | `todo-cli/todo/{config,models,services,cli,api}.py` + `todo-cli/todo/repositories/` | ✅ 完成 | 分层架构 + FastAPI REST API + CLI |
+| 项目元数据 | `todo-cli/pyproject.toml` | ✅ 完成 | runtime + dev extras、ruff、coverage 阈值 80% |
+| 测试套件 | `todo-cli/tests/{unit,integration}/` | ✅ 完成 | 29 测试，本地覆盖率 96.23% |
+| 工单模板说明 | `tickets/README.md` | ✅ 完成 | 命名规范 + 标准字段 |
+| TODO-002 工单 | `tickets/TODO-002-add-due-date-and-priority.md` | ✅ 完成 | 含故意瑕疵，供 Copilot 评审验证 |
+| 工作流文件 | `.github/workflows/todo-cli-ci.yml` | ✅ 完成 | pytest+cov、ruff、Copilot 代码评审、Copilot 工单评审 |
+| Copilot 代码评审产物 | `copilot-review` artifact / `todo-cli/copilot-review.md` | ✅ CI 产出 | 不入仓 |
+| Copilot 工单评审产物 | `ticket-review` artifact / `ticket-review.md` | ✅ CI 产出 | 不入仓 |
+| Git 忽略 | `.gitignore` | ✅ 完成 | 排除 env / pycache / artifacts |
+
+### 关键 commit 历史
+- `67ebfbf` — feat: add todo-cli Python project and Copilot CI workflow
+- `a79c4a0` — fix(ci): specify cache-dependency-path for setup-python
+- `053349c` — feat(todo-cli): refactor into layered architecture with CLI + REST API（阶段 ①②）
+- `58b435f` — docs(tickets): add TODO-002 ticket for due-date and priority feature（阶段 ③④）
+- `bd5a1d7` — feat(ci): add Copilot CLI ticket-vs-code review step（阶段 ⑤）
 
 ---
 
 ## 5. 验收标准
 
-- [ ] 本地 `pytest` 全绿，`ruff check .` 无错误。
-- [ ] `main` 分支推送后 `Todo CLI - Test & Copilot Review` 工作流成功。
+- [x] 本地 `pytest` 全绿，`ruff check .` 无错误（29 passed / coverage 96.23%）。
+- [x] `main` 分支推送后 `Todo CLI - Test & Copilot Review` 工作流被触发（CI Run #3 已成功 49s）。
 - [ ] Actions 运行产物含 `copilot-review`（代码评审）与 `ticket-review`（工单评审）两份 artifact。
-- [ ] `ticket-review.md` 至少识别出 §3 阶段 ⑤"期望发现项"中的 **3 项及以上**。
-- [ ] 本文档随每个阶段更新"产出记录"与决策追加。
+      → 待 commit `bd5a1d7` 触发的新一轮 CI 验证。
+- [ ] `ticket-review.md` 至少识别出 §3 阶段 ⑤ 期望发现项中的 **3 项及以上**。
+      → 需 CI 跑完后下载 artifact 检查。
+- [x] 本文档随每个阶段更新产出记录与决策追加。
 
 ---
 
@@ -144,10 +157,13 @@
 | Copilot CLI 评审输出质量不稳定 | 工单评审可能漏判 | 通过细化 prompt + 在工单内显式埋点提高命中率 |
 | FastAPI 引入额外依赖增大 CI 时长 | CI 略变慢 | 仅加载必要依赖，使用 pip 缓存 |
 | 重构改动较大易破坏现有 CI | 流水线可能短暂红 | 分阶段本地验证后再 push |
+| Workflow 中 Copilot CLI 可能未生成 `ticket-review.md` | artifact 为空 | 已加 `if-no-files-found: warn` 与 Job Summary 兜底提示 |
 | PAT 仍在本地 `env` 文件中存在泄露风险 | 安全 | 已在 `.gitignore` 排除；建议尽快撤销并重发 |
 
 ---
 
 ## 7. 决策记录（按时间追加）
 
-- **2026-05-17** 选择"推荐方案"完成 ① 项目复杂化、② 工单格式（Markdown）、③ 主题（TODO-002 截止日期 + 优先级）、④ 评审产出形式（同工作流新增 step + ticket-review.md）。
+- **2026-05-17** 完成 阶段 ①②：todo-cli 重构为分层架构 + FastAPI REST API，本地 29 测试全过（commit `053349c`）。
+- **2026-05-17** 完成 阶段 ③④：创建 `tickets/README.md` 与 `TODO-002`（含故意瑕疵，commit `58b435f`）。
+- **2026-05-17** 完成 阶段 ⑤：workflow 追加 `Copilot CLI - review tickets against code` step，输出 `ticket-review.md` 到 Job Summary 与 artifact（commit `bd5a1d7`）。
