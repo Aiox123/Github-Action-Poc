@@ -1,26 +1,37 @@
 name: Todo CLI - Test & Copilot Review
 
-# 关联 todo-cli/ Python 项目 + tickets/ 工单目录：
-#   1. 监听 todo-cli/ 代码变更，运行 pytest 单元测试
-#   2. 使用 GitHub Copilot CLI 审查代码，并把改进建议写入 Job Summary
-#   3. 使用 GitHub Copilot CLI 结合实际代码评审 tickets/ 工单，
-#      找出工单与代码之间的不一致、遗漏或风险
+# 关联 todo-cli/ Python 项目 + Jira 工单评审：
+#   1. 监听 todo-cli/ 代码变更，运行 ruff + pytest 单元测试
+#   2. 使用 GitHub Copilot CLI 审查代码，并把改进建议写入 Job Summary / artifact
+#   3. workflow_dispatch 触发时，通过 Jira REST API 拉取指定工单（默认 TC-1），
+#      让 Copilot CLI 结合 todo-cli/ 代码评审工单，最终把评审结果以评论形式
+#      通过 Jira REST API 写回原工单。
 on:
   push:
     branches: [main, develop]
     paths:
       - 'todo-cli/**'
-      - 'tickets/**'
       - '.github/workflows/todo-cli-ci.yml'
+      - '.github/scripts/**'
   pull_request:
     paths:
       - 'todo-cli/**'
-      - 'tickets/**'
       - '.github/workflows/todo-cli-ci.yml'
+      - '.github/scripts/**'
   workflow_dispatch:
+    inputs:
+      jira_issue_key:
+        description: 'Jira issue key to review (e.g. TC-1). Leave empty to skip Jira review.'
+        required: false
+        default: 'TC-1'
 
 permissions:
   contents: read
+
+env:
+  # 非机密配置：可直接放在 workflow，便于代码审阅
+  JIRA_BASE_URL: https://hehuannie.atlassian.net
+  JIRA_PROJECT_KEY: TC
 
 jobs:
   test-and-review:
@@ -79,27 +90,46 @@ jobs:
             --allow-tool='write' \
             --no-ask-user
 
-      - name: Publish review to Job Summary
+      - name: Publish code review to Job Summary
         run: |
           echo "## 🤖 Copilot Review for todo-cli" >> "$GITHUB_STEP_SUMMARY"
           cat copilot-review.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload review artifact
+      - name: Upload code review artifact
         uses: actions/upload-artifact@v4
         with:
           name: copilot-review
           path: todo-cli/copilot-review.md
 
-      # ---------- Copilot CLI 工单评审（tickets/ vs todo-cli/ 代码） ----------
-      # 让 Copilot 同时读取 tickets/*.md 与 todo-cli/todo/**/*.py，
-      # 找出工单描述与实际代码的不一致、遗漏和潜在风险。
-      # 注意：此步骤需要访问仓库根目录下的 tickets/，因此用 working-directory: . 覆盖默认值。
-      - name: Copilot CLI - review tickets against code
+      # ==========================================================
+      # 以下步骤仅在 workflow_dispatch 触发且提供 jira_issue_key 时执行：
+      #   1. 通过 Jira REST API 拉取工单 -> jira-issue.md
+      #   2. Copilot CLI 结合 todo-cli/ 代码评审工单 -> ticket-review.md
+      #   3. 把评审结果以评论形式 POST 回 Jira 工单
+      # ==========================================================
+      - name: Install Jira helper dependencies (requests)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.jira_issue_key != ''
+        working-directory: .
+        run: pip install --quiet requests
+
+      - name: Fetch Jira issue via REST API
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.jira_issue_key != ''
+        working-directory: .
+        env:
+          JIRA_BASE_URL: ${{ env.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+        run: python .github/scripts/jira_fetch_issue.py
+
+      - name: Copilot CLI - review Jira issue vs code
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.jira_issue_key != ''
         working-directory: .
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
         run: |
-          copilot -p "You are a senior engineer doing a ticket review. Read every Markdown file under ./tickets/ (skip tickets/README.md) and cross-check each ticket against the actual codebase under ./todo-cli/ (especially todo-cli/todo/**/*.py, todo-cli/pyproject.toml, todo-cli/README.md, todo-cli/tests/**). For EACH ticket produce a report with these sections: (A) Inconsistencies with code — files/modules/functions/versions referenced in the ticket that do NOT match the current code (e.g. wrong file paths, removed modules, wrong Python version, obsolete dependency files); (B) Missing details — important things the ticket forgot (e.g. REST API field updates, timezone handling, sort stability/secondary keys, CLI flag conflicts, migration of existing JSON data, test coverage gaps); (C) Risks & open questions — anything ambiguous or risky for implementation. Be concrete: cite exact file paths and symbol names from the code. Keep the total output under 400 words. Write the result to ticket-review.md as Markdown with one top-level section per ticket." \
+          copilot -p "You are a senior engineer doing a ticket review. Read ./jira-issue.md (a Jira ticket exported via REST API) and cross-check it against the actual codebase under ./todo-cli/ (especially todo-cli/todo/**/*.py, todo-cli/pyproject.toml, todo-cli/README.md, todo-cli/tests/**). Produce a Markdown report with three sections: (A) Inconsistencies with code — files / modules / functions / versions referenced in the ticket that do NOT match the current code (e.g. wrong file paths, removed modules, wrong Python version, obsolete dependency files); (B) Missing details — important things the ticket forgot (e.g. REST API field updates, timezone handling, sort stability / secondary keys, CLI flag conflicts, migration of existing JSON data, test coverage gaps); (C) Risks & open questions — anything ambiguous or risky for implementation. Be concrete: cite exact file paths and symbol names. Keep the total output under 400 words. Write the report to ticket-review.md." \
             --allow-tool='shell(ls:*)' \
             --allow-tool='shell(cat:*)' \
             --allow-tool='shell(find:*)' \
@@ -107,10 +137,22 @@ jobs:
             --allow-tool='write' \
             --no-ask-user
 
+      - name: Post review back to Jira as a comment
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.jira_issue_key != ''
+        working-directory: .
+        env:
+          JIRA_BASE_URL: ${{ env.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python .github/scripts/jira_post_comment.py
+
       - name: Publish ticket review to Job Summary
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.jira_issue_key != ''
         working-directory: .
         run: |
-          echo "## 🎫 Copilot Ticket Review (tickets/ vs todo-cli/)" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 🎫 Copilot Ticket Review for Jira ${{ github.event.inputs.jira_issue_key }}" >> "$GITHUB_STEP_SUMMARY"
           if [ -f ticket-review.md ]; then
             cat ticket-review.md >> "$GITHUB_STEP_SUMMARY"
           else
@@ -118,8 +160,11 @@ jobs:
           fi
 
       - name: Upload ticket review artifact
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.jira_issue_key != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ticket-review
-          path: ticket-review.md
+          name: ticket-review-${{ github.event.inputs.jira_issue_key }}
+          path: |
+            ticket-review.md
+            jira-issue.md
           if-no-files-found: warn

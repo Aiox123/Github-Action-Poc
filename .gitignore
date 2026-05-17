@@ -31,8 +31,11 @@ todo-cli/copilot-review.md
 copilot-review.md
 ticket-review.md
 
-# Jira / 临时脚本：仅本地调试，不入仓
-scripts/
+# CI 中从 Jira REST API 拉取的工单快照
+jira-issue.md
+
+# Jira / 临时脚本：仅本地调试，不入仓（仅限仓库根 scripts/，不影响 .github/scripts/）
+/scripts/
 
 # ---------- 编辑器 / 操作系统 ----------
 .idea/
