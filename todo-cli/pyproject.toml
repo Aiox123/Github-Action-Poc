@@ -1,0 +1,62 @@
+[project]
+name = "todo-cli"
+version = "0.2.0"
+description = "A layered todo manager with CLI and REST API, used inside Github-Action-Poc."
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Aiox123" }]
+
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "httpx>=0.27",       # FastAPI TestClient backend
+    "ruff>=0.5",
+]
+
+[project.scripts]
+todo = "todo.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["todo*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["todo"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 80
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI relies on `Depends(...)` as default argument values.
+"todo/api.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.10"
+strict_optional = true
+ignore_missing_imports = true

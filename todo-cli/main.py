@@ -1,4 +1,4 @@
-"""Entry point so you can run: python main.py <command>"""
+"""Compatibility entry point so ``python main.py <cmd>`` still works."""
 
 from todo.cli import main
 

@@ -26,6 +26,7 @@ htmlcov/
 # todo-cli 运行时生成的本地数据
 todo-cli/todos.json
 todo-cli/copilot-review.md
+todo-cli/ticket-review.md
 
 # ---------- 编辑器 / 操作系统 ----------
 .idea/

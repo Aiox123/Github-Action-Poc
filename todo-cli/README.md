@@ -1,51 +1,84 @@
-# Todo CLI
+# Todo CLI & API
 
-A tiny command-line todo manager written in Python. Demonstrates a minimal,
-testable Python project layout suitable for use inside the
-`Github-Action-Poc` repository.
+A layered Python todo manager that demonstrates a more realistic project
+structure inside `Github-Action-Poc`. Exposes both a CLI and a REST API
+sharing the same service / repository core.
 
-## Requirements
-
-- Python 3.9+
-- (Optional) `pytest` for running the test suite
-
-## Project layout
+## Architecture
 
 ```
 todo-cli/
-├── main.py              # Entry point (python main.py <command>)
+├── pyproject.toml
+├── main.py                     # `python main.py <cmd>` compatibility entry
 ├── todo/
 │   ├── __init__.py
-│   ├── cli.py           # argparse-based CLI
-│   └── storage.py       # JSON file storage helpers
-├── tests/
-│   └── test_storage.py
-└── README.md
+│   ├── config.py               # Settings (TODO_DATA_FILE override)
+│   ├── models.py               # TodoItem domain dataclass
+│   ├── repositories/
+│   │   ├── base.py             # TodoRepository ABC
+│   │   └── json_repo.py        # JSON file implementation
+│   ├── services.py             # TodoService (business rules + id gen)
+│   ├── cli.py                  # argparse CLI
+│   └── api.py                  # FastAPI HTTP interface
+└── tests/
+    ├── conftest.py
+    ├── unit/                   # models / repository / service
+    └── integration/            # CLI / API end-to-end
 ```
 
-Todos are persisted to `todo-cli/todos.json` (created on first add).
+Data is persisted to `todo-cli/todos.json` by default, or to any path
+specified via the `TODO_DATA_FILE` environment variable.
 
-## Usage
+## Requirements
+
+- Python ≥ 3.10
+- Runtime: `fastapi`, `uvicorn`
+- Dev: `pytest`, `pytest-cov`, `httpx`, `ruff`
+
+## Setup
 
 ```bash
-# Show help
-python main.py --help
+cd todo-cli
+pip install -e ".[dev]"
+```
 
-# Add tasks
+## CLI usage
+
+```bash
+python main.py --help
 python main.py add "Read the docs"
 python main.py add "Ship the PoC"
-
-# List
 python main.py list
-
-# Mark done / remove
 python main.py done 1
 python main.py rm 2
 ```
 
-## Running tests
+Or, after `pip install -e .`, use the `todo` entry point directly:
 
 ```bash
-pip install pytest
-pytest
+todo add "Hello"
+todo list
 ```
+
+## REST API usage
+
+```bash
+uvicorn todo.api:app --reload
+# then:
+curl http://localhost:8000/healthz
+curl -X POST http://localhost:8000/todos -H 'Content-Type: application/json' -d '{"title":"hi"}'
+curl http://localhost:8000/todos
+```
+
+Interactive docs: http://localhost:8000/docs
+
+## Quality gates
+
+```bash
+ruff check .
+pytest --cov
+```
+
+`pyproject.toml` enforces:
+- coverage `fail_under = 80`
+- ruff rule sets `E, F, I, B, UP, SIM`
