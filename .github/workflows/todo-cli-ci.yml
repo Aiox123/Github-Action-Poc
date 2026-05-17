@@ -83,7 +83,7 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          copilot -p "Inspect the Python files under the current directory (the todo-cli project: main.py, todo/*.py, tests/*.py). Produce a concise code review (<= 200 words) covering: (1) code quality observations, (2) up to 3 concrete improvement suggestions, (3) any missing test scenarios. Save the review to copilot-review.md as Markdown." \
+          copilot -p "请用中文完成以下任务，最终输出的 Markdown 报告必须是中文：检查当前目录下的 todo-cli Python 项目（main.py、todo/*.py、tests/*.py），生成一份简洁的代码评审（不超过 300 字），包含三个部分：（1）代码质量观察；（2）不超过 3 条具体的改进建议（要点名、文件、函数）；（3）缺失的测试场景。请使用 Markdown 三级标题划分部分。将报告写入 copilot-review.md。所有小节、表格、项目符号、说明文字都必须使用中文（文件路径、函数名、代码片段可保留英文）。" \
             --allow-tool='shell(ls:*)' \
             --allow-tool='shell(cat:*)' \
             --allow-tool='shell(find:*)' \
@@ -92,7 +92,7 @@ jobs:
 
       - name: Publish code review to Job Summary
         run: |
-          echo "## 🤖 Copilot Review for todo-cli" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 🤖 Copilot 代码评审（todo-cli）" >> "$GITHUB_STEP_SUMMARY"
           cat copilot-review.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload code review artifact
@@ -129,7 +129,7 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
         run: |
-          copilot -p "You are a senior engineer doing a ticket review. Read ./jira-issue.md (a Jira ticket exported via REST API) and cross-check it against the actual codebase under ./todo-cli/ (especially todo-cli/todo/**/*.py, todo-cli/pyproject.toml, todo-cli/README.md, todo-cli/tests/**). Produce a Markdown report with three sections: (A) Inconsistencies with code — files / modules / functions / versions referenced in the ticket that do NOT match the current code (e.g. wrong file paths, removed modules, wrong Python version, obsolete dependency files); (B) Missing details — important things the ticket forgot (e.g. REST API field updates, timezone handling, sort stability / secondary keys, CLI flag conflicts, migration of existing JSON data, test coverage gaps); (C) Risks & open questions — anything ambiguous or risky for implementation. Be concrete: cite exact file paths and symbol names. Keep the total output under 400 words. Write the report to ticket-review.md." \
+          copilot -p "你是一名资深工程师，正在对一张 Jira 工单进行评审。请阅读 ./jira-issue.md（通过 REST API 导出的 Jira 工单快照），并与 ./todo-cli/ 下的实际代码仓库（重点是 todo-cli/todo/**/*.py、todo-cli/pyproject.toml、todo-cli/README.md、todo-cli/tests/**）进行逐项核对。生成一份 Markdown 报告，包含三个二级标题部分：## 一、代码与工单的不一致之处（列出工单中提及但实际代码不匹配的文件 / 模块 / 函数 / 版本，例如错误的文件路径、已移除的模块、错误的 Python 版本、过时的依赖文件等）；## 二、缺失的细节（工单遗漏的重要内容，例如 CLI 参数冲突、现有 JSON 数据迁移、排序稳定性 / 次关键字、时区处理、测试覆盖不足等）；## 三、风险与待确认问题（任何模糊或影响实现的点）。请具体到文件路径与符号名。总体字数不超过 500 字。将报告写入 ticket-review.md。【重要】所有说明性文字、小节标题、项目符号、结论都必须使用中文；仅文件路径、代码符号、代码片段可保留原始英文。不要输出任何英文段落。" \
             --allow-tool='shell(ls:*)' \
             --allow-tool='shell(cat:*)' \
             --allow-tool='shell(find:*)' \
@@ -152,11 +152,11 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.jira_issue_key != ''
         working-directory: .
         run: |
-          echo "## 🎫 Copilot Ticket Review for Jira ${{ github.event.inputs.jira_issue_key }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 🎫 Copilot 工单评审（Jira ${{ github.event.inputs.jira_issue_key }}）" >> "$GITHUB_STEP_SUMMARY"
           if [ -f ticket-review.md ]; then
             cat ticket-review.md >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "_ticket-review.md was not produced by Copilot CLI._" >> "$GITHUB_STEP_SUMMARY"
+            echo "_Copilot CLI 未生成 ticket-review.md。_" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload ticket review artifact
