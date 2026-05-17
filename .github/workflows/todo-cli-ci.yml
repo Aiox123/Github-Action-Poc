@@ -1,0 +1,82 @@
+name: Todo CLI - Test & Copilot Review
+
+# 关联 todo-cli/ Python 项目：
+#   1. 监听该目录下的代码变更，运行 pytest 单元测试
+#   2. 使用 GitHub Copilot CLI 审查代码，并把改进建议写入 Job Summary
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'todo-cli/**'
+      - '.github/workflows/todo-cli-ci.yml'
+  pull_request:
+    paths:
+      - 'todo-cli/**'
+      - '.github/workflows/todo-cli-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-review:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: todo-cli
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ---------- Python 测试 ----------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        run: pytest -v
+
+      # ---------- Copilot CLI 代码评审 ----------
+      - name: Set up Node.js (for Copilot CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 官方正确包名：@github/copilot
+      - name: Install GitHub Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Verify Copilot CLI
+        run: copilot --version
+
+      # 仓库 Settings > Secrets > Actions 中配置的 fine-grained PAT，
+      # 名称：PERSONAL_ACCESS_TOKEN，权限至少包含 "Copilot Requests"
+      - name: Copilot CLI - review todo-cli code
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          copilot -p "Inspect the Python files under the current directory (the todo-cli project: main.py, todo/*.py, tests/*.py). Produce a concise code review (<= 200 words) covering: (1) code quality observations, (2) up to 3 concrete improvement suggestions, (3) any missing test scenarios. Save the review to copilot-review.md as Markdown." \
+            --allow-tool='shell(ls:*)' \
+            --allow-tool='shell(cat:*)' \
+            --allow-tool='shell(find:*)' \
+            --allow-tool='write' \
+            --no-ask-user
+
+      - name: Publish review to Job Summary
+        run: |
+          echo "## 🤖 Copilot Review for todo-cli" >> "$GITHUB_STEP_SUMMARY"
+          cat copilot-review.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload review artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-review
+          path: todo-cli/copilot-review.md

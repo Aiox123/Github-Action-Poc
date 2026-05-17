@@ -1,0 +1,35 @@
+# ---------- 敏感文件 ----------
+# 包含 PAT 等秘密的本地文件，绝不能提交
+env
+.env
+.env.*
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+ENV/
+
+# 测试 / 类型检查缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# todo-cli 运行时生成的本地数据
+todo-cli/todos.json
+todo-cli/copilot-review.md
+
+# ---------- 编辑器 / 操作系统 ----------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
