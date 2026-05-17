@@ -31,6 +31,9 @@ todo-cli/copilot-review.md
 copilot-review.md
 ticket-review.md
 
+# Jira / 临时脚本：仅本地调试，不入仓
+scripts/
+
 # ---------- 编辑器 / 操作系统 ----------
 .idea/
 .vscode/
