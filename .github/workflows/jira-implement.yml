@@ -88,39 +88,22 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm install -g @github/copilot
 
+      - name: Prepare implementation prompt
+        working-directory: todo-cli
+        run: |
+          echo "=== Project structure ==="
+          find . -type f -name '*.py' | head -50
+          echo ""
+          echo "=== Jira issue content ==="
+          cat ../jira-issue.md
+
       - name: Copilot CLI - implement Jira issue
         working-directory: todo-cli
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
         run: |
-          copilot -p "你是一名资深 Python 工程师。请阅读上层目录中的 ../jira-issue.md（一张通过 Jira REST API 导出的需求工单），然后根据工单描述的需求，修改当前目录（todo-cli/）下的代码来实现该需求。
-
-          【项目结构说明】
-          当前项目采用分层架构：
-          - todo/models.py: 领域模型（dataclass）
-          - todo/repositories/base.py: TodoRepository ABC
-          - todo/repositories/json_repo.py: JSON 文件存储实现
-          - todo/services.py: 业务逻辑层（TodoService）
-          - todo/cli.py: argparse CLI 入口
-          - todo/api.py: FastAPI HTTP 接口
-          - todo/config.py: 应用配置
-          - tests/unit/: 单元测试
-          - tests/integration/: 集成测试
-          - pyproject.toml: 项目元数据与依赖
-
-          【实现要求】
-          1. 遵循现有分层架构，在对应层添加代码
-          2. 为新功能编写对应的 pytest 测试用例（至少覆盖成功路径和一个边界/失败路径）
-          3. 不引入外部第三方依赖（仅使用 Python 标准库）
-          4. 代码注释和 docstring 使用中文
-          5. 如果需要修改 README.md，请同步更新命令说明
-          6. 确保修改后 ruff check . 和 pytest 仍能通过
-
-          【约束】
-          - 只允许修改 todo-cli/ 目录下的文件
-          - 不要修改 .github/ 或仓库根目录的任何文件
-          - 如果工单中有模糊之处，按最合理的解读实现，并在代码注释中标注你的假设" \
+          copilot -p "请按以下步骤执行：1) 用 cat 命令读取 ../jira-issue.md 了解需求工单内容；2) 用 cat 命令读取当前目录下的 todo/models.py、todo/services.py、todo/cli.py、todo/repositories/json_repo.py 了解现有代码结构；3) 根据工单需求实现功能，必须使用 write 工具将修改后的代码写入对应的文件（如 todo/models.py、todo/services.py、todo/cli.py 等）；4) 为新功能编写 pytest 测试，使用 write 工具写入 tests/ 目录下的测试文件。要求：不引入第三方依赖，只用标准库；代码注释用中文；遵循现有分层架构。你必须使用 write 工具把每个修改过的文件完整写入磁盘，否则任务不算完成。" \
             --allow-tool='shell(ls:*)' \
             --allow-tool='shell(cat:*)' \
             --allow-tool='shell(find:*)' \
