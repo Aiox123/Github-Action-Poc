@@ -1,12 +1,9 @@
-import json
 import argparse
-from pathlib import Path
+import json
 
-import pytest
-
+import todo.cli as cli
 from todo.repositories.json_repo import JsonTodoRepository
 from todo.services import TodoService
-import todo.cli as cli
 
 
 def test_export_and_import_overwrite(tmp_path):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable
 
 from .models import TodoItem
 from .repositories.base import TodoRepository
@@ -102,8 +101,8 @@ class TodoService:
                 raise ValueError(f"第{idx}项缺失字段 'id'")
             try:
                 _id = int(entry["id"])
-            except Exception:
-                raise ValueError(f"第{idx}项字段 'id' 必须是整数")
+            except Exception as exc:
+                raise ValueError(f"第{idx}项字段 'id' 必须是整数") from exc
             # title
             if "title" not in entry:
                 raise ValueError(f"第{idx}项缺失字段 'title'")
