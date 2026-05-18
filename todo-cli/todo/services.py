@@ -42,6 +42,32 @@ class TodoService:
             raise TodoNotFoundError(todo_id)
         return item
 
+    def stats(self) -> dict[str, object]:
+        """生成统计信息。
+
+        返回字典包含：
+        - total: 总任务数
+        - completed: 已完成数量
+        - pending: 未完成数量
+        - completion_rate: 完成率（百分比，保留 1 位小数）
+
+        在无任务时，完成率返回 0.0。
+        """
+        items = self._repo.list_all()
+        total = len(items)
+        completed = sum(1 for t in items if t.done)
+        pending = total - completed
+        completion_rate = 0.0
+        if total > 0:
+            # 百分比并保留 1 位小数
+            completion_rate = round((completed / total) * 100.0, 1)
+        return {
+            "total": total,
+            "completed": completed,
+            "pending": pending,
+            "completion_rate": completion_rate,
+        }
+
     # ---- commands ---------------------------------------------------
     def add(self, title: str) -> TodoItem:
         next_id = self._next_id()

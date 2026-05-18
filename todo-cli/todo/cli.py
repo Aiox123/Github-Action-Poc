@@ -55,6 +55,24 @@ def _cmd_rm(args: argparse.Namespace, service: TodoService) -> int:
     return 0
 
 
+def _cmd_stats(_args: argparse.Namespace, service: TodoService) -> int:
+    """处理 stats 子命令并格式化输出。"""
+    s = service.stats()
+    total = s.get("total", 0)
+    if total == 0:
+        # 无任务时的友好提示（中文）
+        print("暂无任务数据")
+        return 0
+    # 输出示例：📊 任务统计\n  总计: 5\n  已完成: 3\n  未完成: 2\n  完成率: 60.0%
+    print("📊 任务统计")
+    print(f"  总计: {s['total']}")
+    print(f"  已完成: {s['completed']}")
+    print(f"  未完成: {s['pending']}")
+    # completion_rate 已经是百分比形式
+    print(f"  完成率: {s['completion_rate']}%")
+    return 0
+
+
 # ---- parser -------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="todo", description="A layered todo CLI.")
@@ -75,6 +93,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_rm = sub.add_parser("rm", help="Remove a todo")
     p_rm.add_argument("id", type=int, help="Todo id")
     p_rm.set_defaults(func=_cmd_rm)
+
+    p_stats = sub.add_parser("stats", help="Show todo statistics")
+    p_stats.set_defaults(func=_cmd_stats)
 
     return parser
 
