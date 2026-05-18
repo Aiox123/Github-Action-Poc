@@ -88,29 +88,46 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm install -g @github/copilot
 
-      - name: Prepare implementation prompt
+      - name: Gather context for Copilot
         working-directory: todo-cli
         run: |
           echo "=== Project structure ==="
-          find . -type f -name '*.py' | head -50
+          find . -type f -name '*.py' | sort
           echo ""
           echo "=== Jira issue content ==="
           cat ../jira-issue.md
+          echo ""
+          echo "=== Key source files ==="
+          for f in todo/models.py todo/services.py todo/cli.py todo/repositories/json_repo.py todo/config.py; do
+            echo "--- $f ---"
+            cat "$f" 2>/dev/null || echo "(not found)"
+          done
 
-      - name: Copilot CLI - implement Jira issue
+      - name: Copilot CLI - generate implementation script
         working-directory: todo-cli
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
         run: |
-          copilot -p "请按以下步骤执行：1) 用 cat 命令读取 ../jira-issue.md 了解需求工单内容；2) 用 cat 命令读取当前目录下的 todo/models.py、todo/services.py、todo/cli.py、todo/repositories/json_repo.py 了解现有代码结构；3) 根据工单需求实现功能，必须使用 write 工具将修改后的代码写入对应的文件（如 todo/models.py、todo/services.py、todo/cli.py 等）；4) 为新功能编写 pytest 测试，使用 write 工具写入 tests/ 目录下的测试文件。要求：不引入第三方依赖，只用标准库；代码注释用中文；遵循现有分层架构。你必须使用 write 工具把每个修改过的文件完整写入磁盘，否则任务不算完成。" \
+          copilot -p "Read the file ../jira-issue.md to understand the requirements. Then read the existing source files: todo/models.py, todo/services.py, todo/cli.py, todo/repositories/json_repo.py. Based on the requirements in the Jira issue, write a SINGLE shell script called implement.sh that uses heredoc (cat << 'EOF' > filename) to create or overwrite each source file that needs changes. The script should include ALL modified/new Python files (source code + tests). Requirements: only use Python stdlib, write Chinese comments, follow the existing layered architecture pattern. The implement.sh must be a complete executable script. Write it to implement.sh using the write tool." \
             --allow-tool='shell(ls:*)' \
             --allow-tool='shell(cat:*)' \
             --allow-tool='shell(find:*)' \
             --allow-tool='shell(grep:*)' \
-            --allow-tool='shell(python:*)' \
             --allow-tool='write' \
             --no-ask-user
+
+      - name: Execute implementation script
+        working-directory: todo-cli
+        run: |
+          if [ -f implement.sh ]; then
+            echo "[OK] implement.sh found, executing..."
+            chmod +x implement.sh
+            bash implement.sh
+            echo "[OK] Implementation script executed."
+            rm -f implement.sh
+          else
+            echo "::warning::Copilot CLI did not generate implement.sh"
+          fi
 
       # ========== 检查变更 & 提交 ==========
       - name: Check for code changes
