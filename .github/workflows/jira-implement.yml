@@ -128,6 +128,25 @@ jobs:
           # 清理拷贝进来的 jira-issue.md 副本，不让它进入 git 提交
           rm -f jira-issue.md
 
+      # ========== 验证生成代码质量 ==========
+      - name: Lint check (ruff)
+        working-directory: todo-cli
+        run: |
+          echo "Running ruff check..."
+          if ! ruff check .; then
+            echo "::notice::Auto-fixing ruff errors..."
+            ruff check . --fix
+            echo "[OK] ruff auto-fix applied."
+          else
+            echo "[OK] No lint errors."
+          fi
+
+      - name: Run tests (pytest)
+        working-directory: todo-cli
+        run: |
+          echo "Running pytest..."
+          pytest tests/ -v --tb=short || echo "::warning::Some tests failed, PR will still be created for review."
+
       # ========== 检查变更 & 提交 ==========
       - name: Check for code changes
         id: changes
