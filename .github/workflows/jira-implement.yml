@@ -128,24 +128,69 @@ jobs:
           # 清理拷贝进来的 jira-issue.md 副本，不让它进入 git 提交
           rm -f jira-issue.md
 
-      # ========== 验证生成代码质量 ==========
-      - name: Lint check (ruff)
+      # ========== 验证代码质量 & Copilot 自动修复循环 (最多 3 轮) ==========
+      - name: Validate and auto-fix code quality
         working-directory: todo-cli
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          echo "Running ruff check..."
-          if ! ruff check .; then
-            echo "::notice::Auto-fixing ruff errors..."
-            ruff check . --fix
-            echo "[OK] ruff auto-fix applied."
-          else
-            echo "[OK] No lint errors."
-          fi
+          MAX_RETRIES=3
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "========== 质量检查第 ${i}/${MAX_RETRIES} 轮 =========="
+            ERRORS=""
 
-      - name: Run tests (pytest)
-        working-directory: todo-cli
-        run: |
-          echo "Running pytest..."
-          pytest tests/ -v --tb=short || echo "::warning::Some tests failed, PR will still be created for review."
+            # 1) ruff lint
+            echo "--- ruff check ---"
+            RUFF_OUTPUT=$(ruff check . 2>&1) || true
+            if [ -n "$RUFF_OUTPUT" ]; then
+              echo "$RUFF_OUTPUT"
+              # 先尝试自动修复
+              ruff check . --fix 2>/dev/null || true
+              # 再次检查是否还有不可自动修复的错误
+              RUFF_REMAINING=$(ruff check . 2>&1) || true
+              if [ -n "$RUFF_REMAINING" ]; then
+                ERRORS="${ERRORS}\n[RUFF ERRORS]:\n${RUFF_REMAINING}"
+              else
+                echo "[OK] ruff errors auto-fixed."
+              fi
+            else
+              echo "[OK] No lint errors."
+            fi
+
+            # 2) pytest
+            echo "--- pytest ---"
+            PYTEST_OUTPUT=$(pytest tests/ -v --tb=short 2>&1) || true
+            if echo "$PYTEST_OUTPUT" | grep -q "FAILED\|ERROR"; then
+              # 只保留失败摘要（最后 30 行）
+              PYTEST_SUMMARY=$(echo "$PYTEST_OUTPUT" | tail -30)
+              ERRORS="${ERRORS}\n[PYTEST FAILURES]:\n${PYTEST_SUMMARY}"
+            else
+              echo "[OK] All tests passed."
+            fi
+
+            # 如果无错误，跳出循环
+            if [ -z "$ERRORS" ]; then
+              echo "✅ 代码质量检查全部通过!"
+              break
+            fi
+
+            # 如果是最后一轮，不再重试
+            if [ $i -eq $MAX_RETRIES ]; then
+              echo "::warning::已达最大重试次数，仍有错误，继续创建 PR 供人工 review。"
+              echo -e "$ERRORS"
+              break
+            fi
+
+            # 让 Copilot CLI 修复错误
+            echo "❌ 发现错误，让 Copilot CLI 修复 (第 ${i} 次)..."
+            FIX_PROMPT=$(printf "The following errors were found in the Python project under the current directory. Read the relevant source files, fix ALL the errors, and write the corrected files using the write tool.\n%b" "$ERRORS")
+            copilot -p "$FIX_PROMPT" \
+              --allow-tool='shell(cat:*)' \
+              --allow-tool='shell(find:*)' \
+              --allow-tool='shell(grep:*)' \
+              --allow-tool='write' \
+              --no-ask-user
+          done
 
       # ========== 检查变更 & 提交 ==========
       - name: Check for code changes
