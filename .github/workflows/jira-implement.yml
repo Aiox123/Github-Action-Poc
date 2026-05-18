@@ -88,27 +88,24 @@ jobs:
       - name: Install GitHub Copilot CLI
         run: npm install -g @github/copilot
 
-      - name: Gather context for Copilot
+      - name: Copy jira-issue.md into todo-cli (Copilot cannot read outside working-dir)
+        run: cp jira-issue.md todo-cli/jira-issue.md
+
+      - name: Gather context for Copilot (debug)
         working-directory: todo-cli
         run: |
           echo "=== Project structure ==="
           find . -type f -name '*.py' | sort
           echo ""
-          echo "=== Jira issue content ==="
-          cat ../jira-issue.md
-          echo ""
-          echo "=== Key source files ==="
-          for f in todo/models.py todo/services.py todo/cli.py todo/repositories/json_repo.py todo/config.py; do
-            echo "--- $f ---"
-            cat "$f" 2>/dev/null || echo "(not found)"
-          done
+          echo "=== Jira issue (first 80 lines) ==="
+          head -80 jira-issue.md
 
       - name: Copilot CLI - generate implementation script
         working-directory: todo-cli
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          copilot -p "Read the file ../jira-issue.md to understand the requirements. Then read the existing source files: todo/models.py, todo/services.py, todo/cli.py, todo/repositories/json_repo.py. Based on the requirements in the Jira issue, write a SINGLE shell script called implement.sh that uses heredoc (cat << 'EOF' > filename) to create or overwrite each source file that needs changes. The script should include ALL modified/new Python files (source code + tests). Requirements: only use Python stdlib, write Chinese comments, follow the existing layered architecture pattern. The implement.sh must be a complete executable script. Write it to implement.sh using the write tool." \
+          copilot -p "Read ./jira-issue.md to understand the requirements. Then read the existing source files: todo/models.py, todo/services.py, todo/cli.py, todo/repositories/json_repo.py. Based on the Jira issue requirements, write a SINGLE shell script called implement.sh that uses heredoc syntax (cat << 'EOF' > filename) to create or overwrite each Python source file and test file that needs changes. The script must be complete and executable. Write it to ./implement.sh using the write tool." \
             --allow-tool='shell(ls:*)' \
             --allow-tool='shell(cat:*)' \
             --allow-tool='shell(find:*)' \
@@ -128,6 +125,8 @@ jobs:
           else
             echo "::warning::Copilot CLI did not generate implement.sh"
           fi
+          # 清理拷贝进来的 jira-issue.md 副本，不让它进入 git 提交
+          rm -f jira-issue.md
 
       # ========== 检查变更 & 提交 ==========
       - name: Check for code changes
