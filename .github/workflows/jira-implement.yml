@@ -1,0 +1,225 @@
+name: Jira Issue Implementation (Copilot CLI)
+
+# 根据 Jira 工单内容，让 Copilot CLI 自动在 feature 分支上修改 todo-cli/ 代码，
+# 提交并创建 PR，最后把 PR 信息写回 Jira 工单评论区。
+#
+# 触发方式：手动 workflow_dispatch，输入 Jira Issue Key（必填）。
+on:
+  workflow_dispatch:
+    inputs:
+      jira_issue_key:
+        description: 'Jira issue key to implement (e.g. TC-2). Required.'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  JIRA_BASE_URL: https://hehuannie.atlassian.net
+  JIRA_PROJECT_KEY: TC
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ========== 准备环境 ==========
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # 使用 PAT 以确保后续 push/PR 可触发其他 workflow
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'todo-cli/pyproject.toml'
+
+      - name: Install Jira helper dependencies
+        run: pip install --quiet requests
+
+      # ========== 拉取 Jira 工单 ==========
+      - name: Fetch Jira issue via REST API
+        env:
+          JIRA_BASE_URL: ${{ env.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+        run: python .github/scripts/jira_fetch_issue.py
+
+      - name: Display fetched issue (debug)
+        run: cat jira-issue.md
+
+      # ========== 创建 feature 分支 ==========
+      - name: Create or checkout feature branch
+        id: branch
+        env:
+          ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+        run: |
+          BRANCH="feature/${ISSUE_KEY}"
+          echo "branch_name=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+          # 检查远端是否已有此分支
+          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1; then
+            echo "Branch ${BRANCH} already exists on remote, checking out..."
+            git fetch origin "${BRANCH}"
+            git checkout "${BRANCH}"
+            git pull origin "${BRANCH}" --rebase
+          else
+            echo "Creating new branch: ${BRANCH}"
+            git checkout -b "${BRANCH}"
+          fi
+
+      # ========== Copilot CLI 实现代码 ==========
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GitHub Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Copilot CLI - implement Jira issue
+        working-directory: todo-cli
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+        run: |
+          copilot -p "你是一名资深 Python 工程师。请阅读上层目录中的 ../jira-issue.md（一张通过 Jira REST API 导出的需求工单），然后根据工单描述的需求，修改当前目录（todo-cli/）下的代码来实现该需求。
+
+          【项目结构说明】
+          当前项目采用分层架构：
+          - todo/models.py: 领域模型（dataclass）
+          - todo/repositories/base.py: TodoRepository ABC
+          - todo/repositories/json_repo.py: JSON 文件存储实现
+          - todo/services.py: 业务逻辑层（TodoService）
+          - todo/cli.py: argparse CLI 入口
+          - todo/api.py: FastAPI HTTP 接口
+          - todo/config.py: 应用配置
+          - tests/unit/: 单元测试
+          - tests/integration/: 集成测试
+          - pyproject.toml: 项目元数据与依赖
+
+          【实现要求】
+          1. 遵循现有分层架构，在对应层添加代码
+          2. 为新功能编写对应的 pytest 测试用例（至少覆盖成功路径和一个边界/失败路径）
+          3. 不引入外部第三方依赖（仅使用 Python 标准库）
+          4. 代码注释和 docstring 使用中文
+          5. 如果需要修改 README.md，请同步更新命令说明
+          6. 确保修改后 ruff check . 和 pytest 仍能通过
+
+          【约束】
+          - 只允许修改 todo-cli/ 目录下的文件
+          - 不要修改 .github/ 或仓库根目录的任何文件
+          - 如果工单中有模糊之处，按最合理的解读实现，并在代码注释中标注你的假设" \
+            --allow-tool='shell(ls:*)' \
+            --allow-tool='shell(cat:*)' \
+            --allow-tool='shell(find:*)' \
+            --allow-tool='shell(grep:*)' \
+            --allow-tool='shell(python:*)' \
+            --allow-tool='write' \
+            --no-ask-user
+
+      # ========== 检查变更 & 提交 ==========
+      - name: Check for code changes
+        id: changes
+        run: |
+          git add todo-cli/
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Copilot CLI did not produce any code changes."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            # 收集变更文件列表
+            CHANGED=$(git diff --cached --name-only | tr '\n' ',')
+            echo "changed_files=${CHANGED%,}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit changes
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+        run: |
+          git commit -m "feat(${ISSUE_KEY}): implement Jira issue via Copilot CLI
+
+          Automated implementation based on Jira ticket ${ISSUE_KEY}.
+          Generated by GitHub Actions + Copilot CLI."
+
+      - name: Push feature branch
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          BRANCH: ${{ steps.branch.outputs.branch_name }}
+        run: git push origin "${BRANCH}"
+
+      # ========== 创建 PR ==========
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+          BRANCH: ${{ steps.branch.outputs.branch_name }}
+        run: |
+          PR_TITLE="feat(${ISSUE_KEY}): $(head -1 jira-issue.md | sed 's/^# //')"
+          PR_BODY="## 关联 Jira 工单
+
+          - **Key**: ${ISSUE_KEY}
+          - **链接**: ${JIRA_BASE_URL}/browse/${ISSUE_KEY}
+
+          ---
+
+          本 PR 由 Copilot CLI 根据 Jira 工单自动生成。
+          请仔细 review 代码后再 merge。
+
+          _Triggered by [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})_"
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "${PR_TITLE}" \
+            --body "${PR_BODY}")
+
+          echo "pr_url=${PR_URL}" >> "$GITHUB_OUTPUT"
+          echo "pr_title=${PR_TITLE}" >> "$GITHUB_OUTPUT"
+          echo "[OK] PR created: ${PR_URL}"
+
+      # ========== 写回 Jira ==========
+      - name: Post PR info to Jira comment
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          JIRA_BASE_URL: ${{ env.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+          PR_URL: ${{ steps.pr.outputs.pr_url }}
+          PR_TITLE: ${{ steps.pr.outputs.pr_title }}
+          CHANGED_FILES: ${{ steps.changes.outputs.changed_files }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python .github/scripts/jira_post_pr_comment.py
+
+      # ========== Job Summary ==========
+      - name: Publish summary
+        if: always()
+        env:
+          ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+        run: |
+          echo "## 🔧 Jira Issue Implementation Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **工单**: [${ISSUE_KEY}](${JIRA_BASE_URL}/browse/${ISSUE_KEY})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **分支**: \`${{ steps.branch.outputs.branch_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ steps.changes.outputs.has_changes }}" == "true" ]; then
+            echo "- **PR**: ${{ steps.pr.outputs.pr_url }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **变更文件**: \`${{ steps.changes.outputs.changed_files }}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- **结果**: Copilot CLI 未产生代码变更，未创建 PR。" >> "$GITHUB_STEP_SUMMARY"
+          fi
