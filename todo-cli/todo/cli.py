@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from . import __version__
 from .config import get_settings
@@ -55,6 +56,31 @@ def _cmd_rm(args: argparse.Namespace, service: TodoService) -> int:
     return 0
 
 
+def _cmd_export(args: argparse.Namespace, service: TodoService) -> int:
+    try:
+        path = Path(args.file)
+        service.export_to_file(path)
+    except Exception as exc:
+        print(f"导出失败：{exc}", file=sys.stderr)
+        return 1
+    print(f"Exported todos to {path}")
+    return 0
+
+
+def _cmd_import(args: argparse.Namespace, service: TodoService) -> int:
+    try:
+        path = Path(args.file)
+        mode = getattr(args, "mode", "merge")
+        merge = mode == "merge"
+        service.import_from_file(path, merge=merge)
+    except Exception as exc:
+        # Ensure Chinese error messages for schema problems per requirements
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(f"Imported todos from {path} (mode={mode})")
+    return 0
+
+
 # ---- parser -------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="todo", description="A layered todo CLI.")
@@ -75,6 +101,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_rm = sub.add_parser("rm", help="Remove a todo")
     p_rm.add_argument("id", type=int, help="Todo id")
     p_rm.set_defaults(func=_cmd_rm)
+
+    # export
+    p_export = sub.add_parser("export", help="Export todos to a JSON file")
+    p_export.add_argument("file", help="Destination JSON file path")
+    p_export.set_defaults(func=_cmd_export)
+
+    # import
+    p_import = sub.add_parser("import", help="Import todos from a JSON file")
+    p_import.add_argument("file", help="Source JSON file path")
+    group = p_import.add_mutually_exclusive_group()
+    group.add_argument("--merge", action="store_const", const="merge", dest="mode", help="Merge by id (default)")
+    group.add_argument("--overwrite", action="store_const", const="overwrite", dest="mode", help="Overwrite existing todos")
+    # default to merge when neither provided
+    p_import.set_defaults(func=_cmd_import, mode="merge")
 
     return parser
 
